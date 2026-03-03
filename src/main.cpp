@@ -198,7 +198,7 @@ void loop() {
         float rssi = radio.getRSSI();
         float snr = radio.getSNR();
         float freq =
-            radio.getFrequencyError(true); // error de frecuencia estimado
+            radio.getFrequencyError(); // error de frecuencia estimado
 
         Serial.printf("[RX] Paquete #%lu recibido:\n", rxCount);
         Serial.printf("     Datos  : \"%s\"\n", payload.c_str());
