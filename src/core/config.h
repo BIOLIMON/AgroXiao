@@ -37,6 +37,13 @@
 #define NPK_VALUE_UNAVAILABLE  0xFFFF
 
 // ─────────────────────────────────────────────────────────────────────────────
+// I2C — AHT10 (temp/hum ambiente) + SHT30 (sonda de temperatura)
+// GPIO5 = D4 (SDA hardware libre), GPIO4 = D3 (SCL alternativo — D5/GPIO6 lo ocupa RS485)
+// ─────────────────────────────────────────────────────────────────────────────
+#define PIN_I2C_SDA  5    // D4 / GPIO5
+#define PIN_I2C_SCL  4    // D3 / GPIO4
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MONITOREO DE BATERÍA — Nodo Remote
 // El pad BAT solo entrega alimentación de la celda; para medir voltaje hace
 // falta un punto de sense hacia un ADC del ESP32S3.
