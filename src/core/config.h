@@ -50,7 +50,7 @@
 #define PIN_NPK_PWR        4    // GPIO4 / D3 — base del BC557 (via 1kΩ)
 #define NPK_PWR_ON         LOW  // PNP activo-LOW
 #define NPK_PWR_OFF        HIGH
-#define NPK_PWR_WARMUP_MS  500  // ms tras encender antes de leer
+#define NPK_PWR_WARMUP_MS  1500  // ms tras encender antes de leer
 
 // ─────────────────────────────────────────────────────────────────────────────
 // One-Wire — DS18B20 (sonda de temperatura)

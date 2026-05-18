@@ -5,10 +5,9 @@
 #include <esp_system.h>
 #include <esp_sleep.h>
 
-#define DEEP_SLEEP_DURATION_S  10ULL
+#define SLEEP_DURATION_S  10ULL
 
-// Persiste el contador de paquetes entre ciclos de deep sleep
-RTC_DATA_ATTR static uint32_t s_pktSeq = 0;
+static uint32_t s_pktSeq = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 void NodeRemote::init(const NodeConfig& cfg, LoRaManager& lora) {
@@ -22,42 +21,37 @@ void NodeRemote::init(const NodeConfig& cfg, LoRaManager& lora) {
     _env.begin();
     _wm.begin();
 
-    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-    const char* wakeReason = (cause == ESP_SLEEP_WAKEUP_TIMER) ? "timer" : "boot";
-
-    Serial.printf("[REM] Nodo: %s (ID 0x%08lX) | wake: %s | pkt#%lu\n",
-                  cfg.node_name, (unsigned long)cfg.node_id,
-                  wakeReason, (unsigned long)s_pktSeq);
+    Serial.printf("[REM] Nodo: %s (ID 0x%08lX)\n",
+                  cfg.node_name, (unsigned long)cfg.node_id);
     Serial.printf("[REM] WM200SS: A=GPIO%d ADC=GPIO%d B=GPIO%d R=%dΩ (pseudo-AC)\n",
                   PIN_WM_A, PIN_WM_ADC, PIN_WM_B, WM_SERIES_R);
-    Serial.println("[REM] Modo: deep sleep autonomo | cmd serial: config_mode");
+    Serial.println("[REM] Modo: light sleep | cmd serial: config_mode, diag, scan");
     Serial.println();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 void NodeRemote::loop() {
-    // Ventana de 2s para comandos seriales antes de leer y dormir
-    uint32_t t0 = millis();
-    while (millis() - t0 < 2000) {
-        if (Serial.available()) {
-            char c = (char)Serial.read();
-            if (c == '\n' || c == '\r') {
-                _lineBuf[_linePos] = '\0';
-                if (strcmp(_lineBuf, "config_mode") == 0) {
-                    Serial.println("[REM] Entrando a Config Mode...");
-                    delay(300);
-                    if (!ConfigManager::requestConfigModeOnce()) {
-                        Serial.println("[ERR] No se pudo programar Config Mode en NVS");
-                    } else {
-                        ESP.restart();
-                    }
-                } else if (strcmp(_lineBuf, "npk") == 0 || strcmp(_lineBuf, "diag") == 0) {
-                    _printSensorDiagnostic();
+    // Chequear comandos seriales pendientes (no bloqueante)
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        if (c == '\n' || c == '\r') {
+            _lineBuf[_linePos] = '\0';
+            if (strcmp(_lineBuf, "config_mode") == 0) {
+                Serial.println("[REM] Entrando a Config Mode...");
+                delay(300);
+                if (!ConfigManager::requestConfigModeOnce()) {
+                    Serial.println("[ERR] No se pudo programar Config Mode en NVS");
+                } else {
+                    ESP.restart();
                 }
-                _linePos = 0;
-            } else if (_linePos < sizeof(_lineBuf) - 1) {
-                _lineBuf[_linePos++] = c;
+            } else if (strcmp(_lineBuf, "npk") == 0 || strcmp(_lineBuf, "diag") == 0) {
+                _printSensorDiagnostic();
+            } else if (strcmp(_lineBuf, "scan") == 0) {
+                _npk.scanBus();
             }
+            _linePos = 0;
+        } else if (_linePos < sizeof(_lineBuf) - 1) {
+            _lineBuf[_linePos++] = c;
         }
     }
 
@@ -98,12 +92,11 @@ void NodeRemote::loop() {
         ledBlink(1, 50);
     }
 
-    // ── Deep sleep ────────────────────────────────────────────────────────────
-    Serial.printf("[REM] Durmiendo %llus...\n\n", DEEP_SLEEP_DURATION_S);
+    // ── Light sleep — USB y RAM se conservan ──
+    Serial.printf("[REM] Durmiendo %llus...\n\n", SLEEP_DURATION_S);
     Serial.flush();
-
-    esp_sleep_enable_timer_wakeup(DEEP_SLEEP_DURATION_S * 1000000ULL);
-    esp_deep_sleep_start();
+    esp_sleep_enable_timer_wakeup(SLEEP_DURATION_S * 1000000ULL);
+    esp_light_sleep_start();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

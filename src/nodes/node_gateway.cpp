@@ -3,7 +3,7 @@
 #include "core/config.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
-void NodeGateway::init(const NodeConfig& cfg, LoRaManager& lora, MetricsCollector& metrics) {
+void NodeGateway::init(NodeConfig& cfg, LoRaManager& lora, MetricsCollector& metrics) {
     _cfg     = &cfg;
     _lora    = &lora;
     _metrics = &metrics;
@@ -271,6 +271,18 @@ void NodeGateway::_handleCommand(const Command& cmd) {
             }
             ESP.restart();
             break;
+
+        case CommandType::AUTO_PING: {
+            uint32_t ms = cmd.autoping_ms;
+            _cfg->auto_ping_ms = ms;
+            ConfigManager::save(*_cfg);
+            if (ms == 0) {
+                Serial.println("[GW] Auto-ping desactivado y guardado en NVS.");
+            } else {
+                Serial.printf("[GW] Auto-ping: %lu ms (guardado en NVS).\n", (unsigned long)ms);
+            }
+            break;
+        }
 
         default:
             break;

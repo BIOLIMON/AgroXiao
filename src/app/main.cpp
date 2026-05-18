@@ -48,7 +48,7 @@ void setup() {
         case NodeRole::GATEWAY:
             Serial.println("[INIT] Iniciando modo GATEWAY...");
             gateway = new NodeGateway();
-            gateway->init(nodeConfig, lora, metrics);
+            gateway->init(nodeConfig, lora, metrics);  // nodeConfig no-const: Gateway puede modificar auto_ping_ms
             break;
 
         case NodeRole::REMOTE:

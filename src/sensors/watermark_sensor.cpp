@@ -141,6 +141,5 @@ int16_t WatermarkSensor::read(float tempC) {
     if (ohms < 0.0f) {
         return WM_VALUE_UNAVAILABLE;
     }
-    Serial.printf("[WM_RAW] %.0f Ω\n", ohms);
     return _ohmsToCentibars(ohms, tempC);
 }

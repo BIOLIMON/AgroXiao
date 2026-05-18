@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 class NodeGateway {
 public:
-    void init(const NodeConfig& cfg, LoRaManager& lora, MetricsCollector& metrics);
+    void init(NodeConfig& cfg, LoRaManager& lora, MetricsCollector& metrics);
     void loop();
 
 private:
@@ -40,7 +40,7 @@ private:
 
     static constexpr uint8_t MAX_NEIGHBORS = 24;
 
-    const NodeConfig*  _cfg     = nullptr;
+    NodeConfig*        _cfg     = nullptr;
     LoRaManager*       _lora    = nullptr;
     MetricsCollector*  _metrics = nullptr;
 

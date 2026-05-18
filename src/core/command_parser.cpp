@@ -106,7 +106,18 @@ bool CommandParser::_parse() {
         return true;
     }
 
+    if (strcmp(name, "autoping") == 0) {
+        uint32_t ms = 0;
+        if (sscanf(_buf, "autoping %lu", &ms) == 1) {
+            _pending.type        = CommandType::AUTO_PING;
+            _pending.autoping_ms = ms;
+            return true;
+        }
+        Serial.println("[ERR] Uso: autoping <ms>  (0 = desactivado)");
+        return false;
+    }
+
     Serial.printf("[ERR] Comando desconocido: \"%s\"\n", name);
-    Serial.println("      Comandos: ping | range_test <N> | config <sf> <bw> <cr> <pwr> | status | config_mode");
+    Serial.println("      Comandos: ping | range_test <N> | config <sf> <bw> <cr> <pwr> | status | autoping <ms> | config_mode");
     return false;
 }

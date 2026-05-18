@@ -8,6 +8,7 @@ class NpkSensor {
 public:
     bool begin();
     bool read(uint16_t& nitrogen, uint16_t& phosphorus, uint16_t& potassium);
+    void scanBus();  // Escanea direcciones Modbus 0x01-0x0F y muestra raw bytes
 
 private:
     HardwareSerial _uart{1};

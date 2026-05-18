@@ -11,19 +11,21 @@ enum class CommandType : uint8_t {
     RANGE_TEST,   // range_test <N>
     CONFIG,       // config <sf> <bw> <cr> <power>
     STATUS,       // status
-    CONFIG_MODE   // config_mode  → entra al dashboard web (reinicia)
+    CONFIG_MODE,  // config_mode  → entra al dashboard web (reinicia)
+    AUTO_PING     // autoping <ms>  (0 = desactivado)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Resultado del parseo — solo los campos válidos para cada CommandType
 // ─────────────────────────────────────────────────────────────────────────────
 struct Command {
-    CommandType type     = CommandType::NONE;
-    uint16_t    range_n  = 0;       // range_test: número de paquetes
-    uint8_t     cfg_sf   = 0;       // config: spreading factor
-    float       cfg_bw   = 0.0f;   // config: bandwidth kHz
-    uint8_t     cfg_cr   = 0;       // config: coding rate (5-8)
-    int8_t      cfg_pwr  = 0;       // config: potencia dBm
+    CommandType type        = CommandType::NONE;
+    uint16_t    range_n     = 0;      // range_test: número de paquetes
+    uint8_t     cfg_sf      = 0;      // config: spreading factor
+    float       cfg_bw      = 0.0f;  // config: bandwidth kHz
+    uint8_t     cfg_cr      = 0;      // config: coding rate (5-8)
+    int8_t      cfg_pwr     = 0;      // config: potencia dBm
+    uint32_t    autoping_ms = 0;      // autoping: intervalo en ms (0 = off)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
