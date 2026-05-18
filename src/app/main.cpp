@@ -26,6 +26,7 @@ void setup() {
     pinMode(PIN_LED, OUTPUT);
     ledOff();
     pinMode(PIN_BOOT, INPUT_PULLUP);
+    pinMode(PIN_USER_BTN, INPUT_PULLUP);
 
     delay(2000);  // Esperar estabilización del USB
 
@@ -95,9 +96,42 @@ void setup() {
     ledBlink(3, 80);  // 3 parpadeos = boot OK
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Detección de botón WIO presionado ≥6s → Config Mode en runtime
+// ─────────────────────────────────────────────────────────────────────────────
+static void _checkConfigButton() {
+    static uint32_t pressStart = 0;
+    static bool     pressing   = false;
+    static uint8_t  ledPhase   = 0;
+
+    if (digitalRead(PIN_USER_BTN) == LOW) {
+        if (!pressing) {
+            pressing   = true;
+            pressStart = millis();
+            ledPhase   = 0;
+        }
+        uint32_t held = millis() - pressStart;
+
+        // Feedback visual progresivo: parpadea cada segundo
+        uint8_t secs = held / 1000;
+        if (secs != ledPhase) {
+            ledPhase = secs;
+            ledBlink(1, 60);
+        }
+
+        if (held >= 6000) {
+            Serial.println("[BTN] Botón WIO 6s → Config Mode");
+            ledBlink(5, 80);
+            WebConfig::start(nodeConfig);
+            ESP.restart();
+        }
+    } else {
+        pressing = false;
+    }
+}
+
 void loop() {
-    // Procesar comandos seriales para entrar en Config Mode
-    // O ejecutar el nodo según su rol
+    _checkConfigButton();
 
     if (gateway) {
         gateway->loop();
