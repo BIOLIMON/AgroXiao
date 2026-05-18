@@ -101,7 +101,12 @@ bool CommandParser::_parse() {
         return false;
     }
 
+    if (strcmp(name, "config_mode") == 0) {
+        _pending.type = CommandType::CONFIG_MODE;
+        return true;
+    }
+
     Serial.printf("[ERR] Comando desconocido: \"%s\"\n", name);
-    Serial.println("      Comandos: ping | range_test <N> | config <sf> <bw> <cr> <pwr> | status");
+    Serial.println("      Comandos: ping | range_test <N> | config <sf> <bw> <cr> <pwr> | status | config_mode");
     return false;
 }

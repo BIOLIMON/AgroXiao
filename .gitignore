@@ -3,3 +3,7 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Datasheets y esquemáticos de referencia (no van al repo)
+*.pdf
+*.png

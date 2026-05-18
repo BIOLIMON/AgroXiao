@@ -3,20 +3,20 @@
 #include <Arduino.h>
 
 struct EnvReading {
-    float tempAmbient;  // AHT10 [°C], NAN = no disponible
-    float humidity;     // AHT10 [%],  NAN = no disponible
-    float tempProbe;    // SHT30 [°C], NAN = no disponible
+    float tempAmbient;  // Reservado / NAN = no disponible
+    float humidity;     // Reservado / NAN = no disponible
+    float tempProbe;    // DS18B20 [°C], NAN = no disponible
 };
 
 class EnvSensor {
 public:
     bool begin();
     EnvReading read();
+    void scanI2C();      // Imprime por Serial todos los dispositivos en el bus I2C
+    void scanOneWire();  // Imprime por Serial todos los dispositivos en el bus One-Wire
 
-    bool ahtDetected() const { return _ahtOk; }
-    bool shtDetected() const { return _shtOk; }
+    bool ds18b20Detected() const { return _ds18b20Ok; }
 
 private:
-    bool _ahtOk = false;
-    bool _shtOk = false;
+    bool _ds18b20Ok = false;
 };

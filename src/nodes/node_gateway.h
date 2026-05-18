@@ -33,6 +33,7 @@ private:
         float    temp_ambient = NAN;
         float    humidity = NAN;
         float    temp_probe = NAN;
+        int16_t  watermark_cb = WM_VALUE_UNAVAILABLE;
         uint8_t  hops = 0;
         uint32_t last_seen_ms = 0;
     };

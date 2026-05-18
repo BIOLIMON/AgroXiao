@@ -27,10 +27,12 @@ struct TestPacket {
     uint16_t nitrogen;         // mg/kg; 0xFFFF = no disponible
     uint16_t phosphorus;       // mg/kg; 0xFFFF = no disponible
     uint16_t potassium;        // mg/kg; 0xFFFF = no disponible
-    // Datos ambientales — AHT10 (temp/hum) + SHT30 (sonda temp)
-    float    tempAmbient;      // AHT10 [°C]; NAN = no disponible
-    float    humidity;         // AHT10 [%];  NAN = no disponible
-    float    tempProbe;        // SHT30 [°C]; NAN = no disponible
+    // Datos ambientales — temperatura de sonda y campos reservados para compatibilidad
+    float    tempAmbient;      // Reservado; NAN = no disponible
+    float    humidity;         // Reservado; NAN = no disponible
+    float    tempProbe;        // DS18B20 [°C]; NAN = no disponible
+    // Tensión de agua en suelo — Watermark 200SS
+    int16_t  watermarkCb;      // centibares (kPa); WM_VALUE_UNAVAILABLE (-1) = no disponible
 } __attribute__((packed));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ public:
                   uint16_t phosphorus = NPK_VALUE_UNAVAILABLE,
                   uint16_t potassium = NPK_VALUE_UNAVAILABLE,
                   float tempAmbient = NAN, float humidity = NAN, float tempProbe = NAN,
+                  int16_t watermarkCb = WM_VALUE_UNAVAILABLE,
                   uint8_t hopLimit = 1);
 
     // Beacon mesh para descubrimiento de vecinos.
@@ -73,6 +76,7 @@ public:
                         uint16_t phosphorus = NPK_VALUE_UNAVAILABLE,
                         uint16_t potassium = NPK_VALUE_UNAVAILABLE,
                         float tempAmbient = NAN, float humidity = NAN, float tempProbe = NAN,
+                        int16_t watermarkCb = WM_VALUE_UNAVAILABLE,
                         uint8_t hopCount = 0, uint8_t hopLimit = 1);
 
     // Reenvía un paquete mesh incrementando hop_count (si hay TTL disponible).

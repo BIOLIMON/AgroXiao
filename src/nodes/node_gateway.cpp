@@ -64,6 +64,9 @@ void NodeGateway::loop() {
             if (!isnan(pkt.tempProbe)) {
                 Serial.printf(" | Tsonda=%.1f°C", pkt.tempProbe);
             }
+            if (pkt.watermarkCb != WM_VALUE_UNAVAILABLE) {
+                Serial.printf(" | WM=%d cb", pkt.watermarkCb);
+            }
             Serial.println();
 
             if (_rangeActive) {
@@ -188,6 +191,7 @@ void NodeGateway::_handleNodeStatus(const TestPacket& pkt) {
     _neighbors[idx].temp_ambient = pkt.tempAmbient;
     _neighbors[idx].humidity    = pkt.humidity;
     _neighbors[idx].temp_probe  = pkt.tempProbe;
+    _neighbors[idx].watermark_cb = pkt.watermarkCb;
     _neighbors[idx].hops        = pkt.hop_count;
     _neighbors[idx].last_seen_ms = millis();
 
@@ -212,6 +216,9 @@ void NodeGateway::_handleNodeStatus(const TestPacket& pkt) {
     }
     if (!isnan(nb.temp_probe)) {
         Serial.printf(" | Tsonda=%.1f°C", nb.temp_probe);
+    }
+    if (nb.watermark_cb != WM_VALUE_UNAVAILABLE) {
+        Serial.printf(" | WM=%d cb", nb.watermark_cb);
     }
 
     Serial.println();

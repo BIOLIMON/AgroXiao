@@ -53,7 +53,8 @@ bool LoRaManager::begin(const NodeConfig& cfg) {
     // Registrar callback ISR
     _radio.setPacketReceivedAction(onRxDone);
 
-    return true;
+    // Arrancar en modo recepción
+    return listen();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -99,6 +100,7 @@ bool LoRaManager::sendPing(uint32_t sourceId, uint32_t destId, uint32_t packet_i
     pkt.tempAmbient     = NAN;
     pkt.humidity        = NAN;
     pkt.tempProbe       = NAN;
+    pkt.watermarkCb     = WM_VALUE_UNAVAILABLE;
     return _transmit(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
 }
 
@@ -108,6 +110,7 @@ bool LoRaManager::sendPong(uint32_t sourceId, uint32_t destId,
                            float batteryVoltage, uint8_t batteryPercent,
                            uint16_t nitrogen, uint16_t phosphorus, uint16_t potassium,
                            float tempAmbient, float humidity, float tempProbe,
+                           int16_t watermarkCb,
                            uint8_t hopLimit) {
     TestPacket pkt;
     pkt.msg_type        = MSG_PONG;
@@ -127,6 +130,7 @@ bool LoRaManager::sendPong(uint32_t sourceId, uint32_t destId,
     pkt.tempAmbient     = tempAmbient;
     pkt.humidity        = humidity;
     pkt.tempProbe       = tempProbe;
+    pkt.watermarkCb     = watermarkCb;
     return _transmit(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
 }
 
@@ -150,6 +154,7 @@ bool LoRaManager::sendHello(uint32_t sourceId, uint32_t packet_id, uint8_t hopLi
     pkt.tempAmbient     = NAN;
     pkt.humidity        = NAN;
     pkt.tempProbe       = NAN;
+    pkt.watermarkCb     = WM_VALUE_UNAVAILABLE;
     return _transmit(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
 }
 
@@ -158,6 +163,7 @@ bool LoRaManager::sendNodeStatus(uint32_t sourceId, uint32_t destId, uint32_t pa
                                  float batteryVoltage, uint8_t batteryPercent,
                                  uint16_t nitrogen, uint16_t phosphorus, uint16_t potassium,
                                  float tempAmbient, float humidity, float tempProbe,
+                                 int16_t watermarkCb,
                                  uint8_t hopCount, uint8_t hopLimit) {
     TestPacket pkt;
     pkt.msg_type        = MSG_NODE_STATUS;
@@ -177,6 +183,7 @@ bool LoRaManager::sendNodeStatus(uint32_t sourceId, uint32_t destId, uint32_t pa
     pkt.tempAmbient     = tempAmbient;
     pkt.humidity        = humidity;
     pkt.tempProbe       = tempProbe;
+    pkt.watermarkCb     = watermarkCb;
     return _transmit(reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
 }
 

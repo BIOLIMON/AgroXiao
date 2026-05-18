@@ -3,6 +3,12 @@
 #include "core/config.h"
 
 #include <esp_system.h>
+#include <esp_sleep.h>
+
+#define DEEP_SLEEP_DURATION_S  10ULL
+
+// Persiste el contador de paquetes entre ciclos de deep sleep
+RTC_DATA_ATTR static uint32_t s_pktSeq = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 void NodeRemote::init(const NodeConfig& cfg, LoRaManager& lora) {
@@ -14,142 +20,103 @@ void NodeRemote::init(const NodeConfig& cfg, LoRaManager& lora) {
     randomSeed((uint32_t)esp_random());
     _npk.begin();
     _env.begin();
+    _wm.begin();
 
-    Serial.printf("[REM] Nodo: %s (ID 0x%08lX)\n",
-                  cfg.node_name, (unsigned long)cfg.node_id);
-    Serial.printf("[REM] RS485 NPK: UART GPIO%d/GPIO%d, EN GPIO%d\n",
-                  PIN_RS485_TX, PIN_RS485_RX, PIN_RS485_EN);
-    Serial.printf("[REM] I2C ENV: SDA GPIO%d, SCL GPIO%d\n", PIN_I2C_SDA, PIN_I2C_SCL);
-    Serial.printf("[REM] ADC batería en GPIO%d\n", PIN_BAT_ADC);
-    Serial.println("[REM] Escuchando PINGs... (comando serial: config_mode)");
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    const char* wakeReason = (cause == ESP_SLEEP_WAKEUP_TIMER) ? "timer" : "boot";
+
+    Serial.printf("[REM] Nodo: %s (ID 0x%08lX) | wake: %s | pkt#%lu\n",
+                  cfg.node_name, (unsigned long)cfg.node_id,
+                  wakeReason, (unsigned long)s_pktSeq);
+    Serial.printf("[REM] WM200SS: A=GPIO%d ADC=GPIO%d B=GPIO%d R=%dΩ (pseudo-AC)\n",
+                  PIN_WM_A, PIN_WM_ADC, PIN_WM_B, WM_SERIES_R);
+    Serial.println("[REM] Modo: deep sleep autonomo | cmd serial: config_mode");
     Serial.println();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 void NodeRemote::loop() {
-    // Chequear comando serial mínimo: solo "config_mode"
-    if (Serial.available()) {
-        char c = (char)Serial.read();
-        if (c == '\n' || c == '\r') {
-            _lineBuf[_linePos] = '\0';
-            if (strcmp(_lineBuf, "config_mode") == 0) {
-                Serial.println("[REM] Entrando a Config Mode...");
-                delay(300);
-                if (!ConfigManager::requestConfigModeOnce()) {
-                    Serial.println("[ERR] No se pudo programar Config Mode en NVS");
-                    _linePos = 0;
-                    return;
+    // Ventana de 2s para comandos seriales antes de leer y dormir
+    uint32_t t0 = millis();
+    while (millis() - t0 < 2000) {
+        if (Serial.available()) {
+            char c = (char)Serial.read();
+            if (c == '\n' || c == '\r') {
+                _lineBuf[_linePos] = '\0';
+                if (strcmp(_lineBuf, "config_mode") == 0) {
+                    Serial.println("[REM] Entrando a Config Mode...");
+                    delay(300);
+                    if (!ConfigManager::requestConfigModeOnce()) {
+                        Serial.println("[ERR] No se pudo programar Config Mode en NVS");
+                    } else {
+                        ESP.restart();
+                    }
+                } else if (strcmp(_lineBuf, "npk") == 0 || strcmp(_lineBuf, "diag") == 0) {
+                    _printSensorDiagnostic();
                 }
-                ESP.restart();
-            } else if (strcmp(_lineBuf, "npk") == 0 || strcmp(_lineBuf, "diag") == 0) {
-                _printSensorDiagnostic();
+                _linePos = 0;
+            } else if (_linePos < sizeof(_lineBuf) - 1) {
+                _lineBuf[_linePos++] = c;
             }
-            _linePos = 0;
-        } else if (_linePos < sizeof(_lineBuf) - 1) {
-            _lineBuf[_linePos++] = c;
         }
     }
 
-    // Sondear radio
-    TestPacket pkt;
-    if (_lora->poll(pkt)) {
-        if (_isDuplicateAndMark(pkt)) {
-            return;
-        }
+    // ── Leer todos los sensores ───────────────────────────────────────────────
+    float    batV   = _readBatteryVoltage();
+    uint8_t  batPct = _getBatteryPercent(batV);
+    uint16_t n = NPK_VALUE_UNAVAILABLE;
+    uint16_t p = NPK_VALUE_UNAVAILABLE;
+    uint16_t k = NPK_VALUE_UNAVAILABLE;
+    _readNpk(n, p, k);
+    EnvReading env     = _readEnv();
+    float soilTempC    = !isnan(env.tempProbe) ? env.tempProbe : 24.0f;
+    int16_t wm         = _readWatermark(soilTempC);
 
-        if (pkt.msg_type == MSG_PING &&
-            (pkt.dest_id == _cfg->node_id || pkt.dest_id == NODE_BROADCAST_ID)) {
-            ledBlink(1, 30);
-
-            Serial.printf("[RX] Ping #%04lu | RSSI: %.1f dBm | SNR: %.1f dB\n",
-                          (unsigned long)pkt.packet_id,
-                          _lora->getLastRSSI(), _lora->getLastSNR());
-
-            float   batV   = _readBatteryVoltage();
-            uint8_t batPct = _getBatteryPercent(batV);
-            uint16_t n = NPK_VALUE_UNAVAILABLE;
-            uint16_t p = NPK_VALUE_UNAVAILABLE;
-            uint16_t k = NPK_VALUE_UNAVAILABLE;
-            _readNpk(n, p, k);
-            EnvReading env = _readEnv();
-            Serial.printf("[BAT] %.2fV (%d%%)\n", batV, batPct);
-            if (n == NPK_VALUE_UNAVAILABLE || p == NPK_VALUE_UNAVAILABLE || k == NPK_VALUE_UNAVAILABLE) {
-                Serial.println("[NPK] N/D");
-            } else {
-                Serial.printf("[NPK] N=%u mg/kg | P=%u mg/kg | K=%u mg/kg\n", n, p, k);
-            }
-            if (!isnan(env.tempAmbient)) {
-                Serial.printf("[AHT] Tamb=%.1f°C | Hum=%.1f%%\n", env.tempAmbient, env.humidity);
-            }
-            if (!isnan(env.tempProbe)) {
-                Serial.printf("[SHT] Tsonda=%.1f°C\n", env.tempProbe);
-            }
-
-            delay(TX_SPACING_MS + random(REMOTE_TX_JITTER_MIN_MS,
-                                         REMOTE_TX_JITTER_MAX_MS + 1));
-
-            if (_lora->sendPong(_cfg->node_id, pkt.source_id,
-                                pkt.packet_id, pkt.timestamp,
-                                batV, batPct, n, p, k,
-                                env.tempAmbient, env.humidity, env.tempProbe,
-                                pkt.hop_limit)) {
-                Serial.printf("[TX] Pong #%04lu enviado\n", (unsigned long)pkt.packet_id);
-                ledBlink(2, 30);
-            }
-
-            _lora->listen();
-        } else if (pkt.msg_type == MSG_HELLO &&
-                   (pkt.dest_id == _cfg->node_id || pkt.dest_id == NODE_BROADCAST_ID)) {
-            float   batV   = _readBatteryVoltage();
-            uint8_t batPct = _getBatteryPercent(batV);
-            uint16_t n = NPK_VALUE_UNAVAILABLE;
-            uint16_t p = NPK_VALUE_UNAVAILABLE;
-            uint16_t k = NPK_VALUE_UNAVAILABLE;
-            _readNpk(n, p, k);
-            EnvReading env = _readEnv();
-
-            delay(TX_SPACING_MS + random(REMOTE_TX_JITTER_MIN_MS,
-                                         REMOTE_TX_JITTER_MAX_MS + 1));
-            if (_lora->sendNodeStatus(_cfg->node_id, pkt.source_id,
-                                      pkt.packet_id, batV, batPct, n, p, k,
-                                      env.tempAmbient, env.humidity, env.tempProbe,
-                                      0, pkt.hop_limit)) {
-                Serial.printf("[MESH] STATUS -> 0x%08lX | Bat %.2fV (%u%%)",
-                              (unsigned long)pkt.source_id, batV, batPct);
-                if (n != NPK_VALUE_UNAVAILABLE) {
-                    Serial.printf(" | N=%u P=%u K=%u", n, p, k);
-                }
-                if (!isnan(env.tempAmbient)) {
-                    Serial.printf(" | Tamb=%.1f°C Hum=%.1f%%", env.tempAmbient, env.humidity);
-                }
-                if (!isnan(env.tempProbe)) {
-                    Serial.printf(" | Tsonda=%.1f°C", env.tempProbe);
-                }
-                Serial.println();
-            }
-            _lora->listen();
-        }
+    // ── Imprimir lecturas ─────────────────────────────────────────────────────
+    Serial.printf("[BAT] %.2fV (%d%%)\n", batV, batPct);
+    if (n == NPK_VALUE_UNAVAILABLE) {
+        Serial.println("[NPK] N/D");
+    } else {
+        Serial.printf("[NPK] N=%u mg/kg | P=%u mg/kg | K=%u mg/kg\n", n, p, k);
+    }
+    if (!isnan(env.tempProbe)) {
+        Serial.printf("[DS18B20] Tsonda=%.1f°C\n", env.tempProbe);
+    }
+    if (wm != WM_VALUE_UNAVAILABLE) {
+        Serial.printf("[WM]  %d cb (%.1f°C suelo)\n", wm, soilTempC);
+    } else {
+        Serial.println("[WM]  N/D");
     }
 
-    if (millis() - _lastDiagMs >= 10000) {
-        _lastDiagMs = millis();
-        _printSensorDiagnostic();
+    // ── Enviar status al broadcast ────────────────────────────────────────────
+    s_pktSeq++;
+    if (_lora->sendNodeStatus(_cfg->node_id, NODE_BROADCAST_ID, s_pktSeq,
+                               batV, batPct, n, p, k,
+                               env.tempAmbient, env.humidity, env.tempProbe,
+                               wm, 0, 1)) {
+        Serial.printf("[TX] NodeStatus #%04lu enviado\n", (unsigned long)s_pktSeq);
+        ledBlink(1, 50);
     }
+
+    // ── Deep sleep ────────────────────────────────────────────────────────────
+    Serial.printf("[REM] Durmiendo %llus...\n\n", DEEP_SLEEP_DURATION_S);
+    Serial.flush();
+
+    esp_sleep_enable_timer_wakeup(DEEP_SLEEP_DURATION_S * 1000000ULL);
+    esp_deep_sleep_start();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 bool NodeRemote::_isDuplicateAndMark(const TestPacket& pkt) {
     if (pkt.msg_type != MSG_PING && pkt.msg_type != MSG_HELLO) {
         return false;
     }
-
     return PacketDedupe::isDuplicateAndMark(_seen, pkt, SEEN_TTL_MS);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 float NodeRemote::_readBatteryVoltage() {
-    if (!BATTERY_SENSE_ENABLED) {
-        return -1.0f;
-    }
+    if (!BATTERY_SENSE_ENABLED) return -1.0f;
 
     uint32_t sum = 0;
     for (uint8_t i = 0; i < BAT_ADC_SAMPLES; i++) {
@@ -176,22 +143,31 @@ void NodeRemote::_printSensorDiagnostic() {
     uint16_t k = NPK_VALUE_UNAVAILABLE;
     _readNpk(n, p, k);
     EnvReading env = _readEnv();
+    float soilTempC = !isnan(env.tempProbe) ? env.tempProbe : 24.0f;
+    int16_t wm = _readWatermark(soilTempC);
 
-    Serial.printf("[DIAG] BAT %.2fV (%u%%)", batV, batPct);
+    if (batPct == BAT_PERCENT_UNAVAILABLE || batV < 0.0f) {
+        Serial.print("[DIAG] BAT N/D");
+    } else {
+        Serial.printf("[DIAG] BAT %.2fV (%u%%)", batV, batPct);
+    }
     if (n != NPK_VALUE_UNAVAILABLE) {
         Serial.printf(" | N=%u P=%u K=%u mg/kg", n, p, k);
     } else {
         Serial.print(" | NPK N/D");
     }
-    if (!isnan(env.tempAmbient)) {
-        Serial.printf(" | Tamb=%.1f°C Hum=%.1f%%", env.tempAmbient, env.humidity);
-    }
     if (!isnan(env.tempProbe)) {
         Serial.printf(" | Tsonda=%.1f°C", env.tempProbe);
+    }
+    if (wm != WM_VALUE_UNAVAILABLE) {
+        Serial.printf(" | WM=%d cb", wm);
+    } else {
+        Serial.print(" | WM N/D");
     }
     Serial.println();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 EnvReading NodeRemote::_readEnv() {
     return _env.read();
 }
@@ -199,8 +175,13 @@ EnvReading NodeRemote::_readEnv() {
 // ─────────────────────────────────────────────────────────────────────────────
 void NodeRemote::_readNpk(uint16_t& nitrogen, uint16_t& phosphorus, uint16_t& potassium) {
     if (!_npk.read(nitrogen, phosphorus, potassium)) {
-        nitrogen = NPK_VALUE_UNAVAILABLE;
+        nitrogen   = NPK_VALUE_UNAVAILABLE;
         phosphorus = NPK_VALUE_UNAVAILABLE;
-        potassium = NPK_VALUE_UNAVAILABLE;
+        potassium  = NPK_VALUE_UNAVAILABLE;
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+int16_t NodeRemote::_readWatermark(float tempC) {
+    return _wm.read(tempC);
 }

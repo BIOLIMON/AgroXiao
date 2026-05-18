@@ -4,6 +4,7 @@
 #include "mesh/lora_manager.h"
 #include "sensors/npk_sensor.h"
 #include "sensors/env_sensor.h"
+#include "sensors/watermark_sensor.h"
 #include "utils/packet_dedupe.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ private:
     LoRaManager*      _lora = nullptr;
     NpkSensor         _npk;
     EnvSensor         _env;
+    WatermarkSensor   _wm;
 
     PacketDedupe::SeenEntry _seen[SEEN_CACHE_SIZE] = {};
 
@@ -41,5 +43,6 @@ private:
     uint8_t _getBatteryPercent(float voltage);
     void _readNpk(uint16_t& nitrogen, uint16_t& phosphorus, uint16_t& potassium);
     EnvReading _readEnv();
+    int16_t _readWatermark(float tempC);
     void _printSensorDiagnostic();
 };

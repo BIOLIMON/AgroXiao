@@ -1,4 +1,5 @@
 #include "npk_sensor.h"
+#include <driver/gpio.h>
 
 namespace {
 constexpr uint8_t kNpkReadRetries = 3;
@@ -9,10 +10,10 @@ constexpr size_t   kNpkResponseSize = 7;
 }
 
 bool NpkSensor::begin() {
+    pinMode(PIN_NPK_PWR, OUTPUT);
+    digitalWrite(PIN_NPK_PWR, NPK_PWR_OFF);  // apagado por defecto
     pinMode(PIN_RS485_EN, OUTPUT);
     _setTransmitMode(false);
-    _uart.begin(NPK_SENSOR_BAUD, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
-    _uart.setTimeout(NPK_SENSOR_TIMEOUT_MS);
     return true;
 }
 
@@ -21,11 +22,28 @@ bool NpkSensor::read(uint16_t& nitrogen, uint16_t& phosphorus, uint16_t& potassi
     phosphorus = NPK_VALUE_UNAVAILABLE;
     potassium = NPK_VALUE_UNAVAILABLE;
 
+    // Encender módulo, reiniciar UART y esperar estabilización
+    digitalWrite(PIN_NPK_PWR, NPK_PWR_ON);
+    pinMode(PIN_RS485_EN, OUTPUT);
+    _setTransmitMode(false);
+    _uart.begin(NPK_SENSOR_BAUD, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
+    _uart.setTimeout(NPK_SENSOR_TIMEOUT_MS);
+    delay(NPK_PWR_WARMUP_MS);
+
     bool nOk = _readRegister(0x001E, nitrogen);
     delay(kNpkRetryDelayMs);
     bool pOk = _readRegister(0x001F, phosphorus);
     delay(kNpkRetryDelayMs);
     bool kOk = _readRegister(0x0020, potassium);
+
+    // gpio_reset_pin() desconecta el GPIO matrix y elimina pull-ups internos —
+    // única forma de garantizar alta impedancia real en los tres pines.
+    _setTransmitMode(false);
+    _uart.end();
+    gpio_reset_pin((gpio_num_t)PIN_RS485_TX);
+    gpio_reset_pin((gpio_num_t)PIN_RS485_RX);
+    gpio_reset_pin((gpio_num_t)PIN_RS485_EN);
+    digitalWrite(PIN_NPK_PWR, NPK_PWR_OFF);
 
     return nOk && pOk && kOk;
 }

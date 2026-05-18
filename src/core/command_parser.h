@@ -10,7 +10,8 @@ enum class CommandType : uint8_t {
     PING,         // ping
     RANGE_TEST,   // range_test <N>
     CONFIG,       // config <sf> <bw> <cr> <power>
-    STATUS        // status
+    STATUS,       // status
+    CONFIG_MODE   // config_mode  → entra al dashboard web (reinicia)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
