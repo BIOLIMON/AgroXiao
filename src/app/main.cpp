@@ -1,10 +1,12 @@
 #include <Arduino.h>
 #include "core/config_manager.h"
 #include "core/node_config.h"
+#include "core/config.h"
 #include "core/metrics.h"
 #include "mesh/lora_manager.h"
 #include "nodes/node_gateway.h"
 #include "nodes/node_remote.h"
+#include "web/web_config.h"
 
 // Único firmware para todos los nodos (Gateway, Remote, Router)
 // El rol se configura en ConfigManager y persiste en NVS
@@ -19,6 +21,12 @@ NodeRemote  *remote  = nullptr;
 
 void setup() {
     Serial.begin(115200);
+
+    // LED e inicialización temprana antes del delay USB
+    pinMode(PIN_LED, OUTPUT);
+    ledOff();
+    pinMode(PIN_BOOT, INPUT_PULLUP);
+
     delay(2000);  // Esperar estabilización del USB
 
     Serial.println("\n╔═══════════════════════════════════════════════╗");
@@ -28,6 +36,20 @@ void setup() {
 
     // Cargar configuración desde NVS
     nodeConfig = ConfigManager::load();
+
+    // Entrar a Config Mode si: botón BOOT presionado al encender, o NVS lo solicitó
+    bool bootBtn = (digitalRead(PIN_BOOT) == LOW);
+    bool nvsReq  = ConfigManager::consumeConfigModeOnce();
+    bool uncfg   = !ConfigManager::isConfigured(nodeConfig);
+
+    if (bootBtn || nvsReq || uncfg) {
+        if (bootBtn) Serial.println("[INIT] Botón BOOT presionado → Config Mode");
+        if (nvsReq)  Serial.println("[INIT] Config Mode solicitado por NVS");
+        if (uncfg)   Serial.println("[INIT] Nodo sin configurar → Config Mode");
+        ledBlink(3, 100);
+        WebConfig::start(nodeConfig);
+        ESP.restart();
+    }
 
     Serial.printf("[INIT] Rol: %s | ID: 0x%08lX\n",
                   nodeConfig.role == NodeRole::GATEWAY  ? "GATEWAY" :
@@ -70,6 +92,7 @@ void setup() {
     }
 
     Serial.println("[INIT] ✓ Sistema inicializado\n");
+    ledBlink(3, 80);  // 3 parpadeos = boot OK
 }
 
 void loop() {
